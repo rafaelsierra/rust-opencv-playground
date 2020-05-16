@@ -1,62 +1,122 @@
 extern crate opencv;
 
 use opencv::{core, highgui, imgproc, objdetect, prelude::*, types, video, videoio};
+use std;
 
 fn run() -> opencv::Result<()> {
     let window = "video capture";
-    let mask_window = "bg mask";
-    let bla = "data/haarcascades/haarcascade_upperbody.xml";
 
-    let mut cam = videoio::VideoCapture::new_default(0)?; // 0 is the default camera
+    let mut cam = videoio::VideoCapture::new(0, videoio::CAP_V4L)?; // 0 is the default camera
     let opened = videoio::VideoCapture::is_opened(&cam)?;
-    //let mut bg = video::create_background_subtractor_mog2(200, 32.0, false)?;
-    let mut bg_learning = -1.0;
 
+    let mut thrs: f64 = 60.0;
+    let mut max_thrs: f64 = 255.0;
+
+    let red = core::Scalar::new(0.0, 0.0, 255.0, 0.0);
+    let blue = core::Scalar::new(255.0, 0.0, 0.0, 0.0);
+
+    let roboto = highgui::font_qt(
+        "Roboto",
+        12,
+        blue,
+        highgui::QT_FONT_NORMAL,
+        highgui::QT_STYLE_NORMAL,
+        0,
+    )?;
     //highgui::named_window(window, 1)?;
     if !opened {
         panic!("Unable to open default camera!");
     }
     loop {
         let mut frame = core::Mat::default()?;
-        //let mut mask = core::Mat::default()?;
-        let mut edges = core::Mat::default()?;
-        let mut threshold = core::Mat::default()?;
-        imgproc::threshold(&edges, &mut threshold, 127.0, 255.0, 0)?;
         let mut contours = types::VectorOfMat::new();
         cam.read(&mut frame)?;
-        //bg.apply(&frame, &mut mask, bg_learning)?;
-        imgproc::canny(&frame, &mut edges, 50.0, 100.0, 3, true)?;
-        imgproc::find_contours(&mut edges, &mut contours, imgproc::RETR_TREE, imgproc::CHAIN_APPROX_SIMPLE, core::Point::new(0, 0))?;
-        if frame.size()?.width > 0 {
-            //highgui::imshow(window, &mut frame)?;
-            //highgui::imshow(mask_window, &mut mask)?;
-            highgui::imshow("Edges", &mut edges)?;
 
-            //let mut im_cont = core::Mat::default()?;
-            imgproc::draw_contours(
-                &mut frame,
-                &contours,
-                -1,
-                core::Scalar::new(0.0, 0.0, 255.0, 255.0),
-                -1,
-                0,
-                &core::Mat::default()?,
-                0,
+        if frame.size()?.width > 0 {
+            let mut bw = core::Mat::default()?;
+            imgproc::cvt_color(&frame, &mut bw, imgproc::COLOR_RGB2GRAY, 1)?;
+            let mut blur = core::Mat::default()?;
+            imgproc::blur(
+                &bw,
+                &mut blur,
+                core::Size::new(3, 3),
+                core::Point::new(-1, -1),
+                core::BORDER_DEFAULT,
+            )?;
+            let mut threshold = core::Mat::default()?;
+            imgproc::threshold(
+                &blur,
+                &mut threshold,
+                thrs,
+                max_thrs,
+                imgproc::THRESH_BINARY,
+            )?;
+            imgproc::find_contours(
+                &mut threshold,
+                &mut contours,
+                imgproc::RETR_TREE,
+                imgproc::CHAIN_APPROX_NONE,
                 core::Point::new(0, 0),
             )?;
+            //highgui::imshow(window, &mut frame)?;
+            for contour in contours {
+                imgproc::draw_contours(
+                    &mut frame,
+                    &contour,
+                    -1,
+                    red,
+                    1,
+                    8,
+                    &core::Mat::default()?,
+                    std::i32::MAX,
+                    core::Point::new(0, 0),
+                )?;
+
+                let mut hull = core::Mat::default()?;
+                imgproc::convex_hull(&contour, &mut hull, true, false)?;
+                println!("{:?}", hull);
+                if hull.size()?.width > 0 && hull.size()?.height > 0 {
+                    imgproc::draw_contours(
+                        &mut frame,
+                        &hull,
+                        -1,
+                        core::Scalar::new(0.0, 255.0, 0.0, 0.0),
+                        1,
+                        8,
+                        &core::Mat::default()?,
+                        0,
+                        core::Point::new(0, 0),
+                    )?;
+                }
+            }
+
+            /*highgui::imshow("TS", &mut threshold)?;
+
+            highgui::add_text(&mut frame, format!("Threshold: {}", thrs).as_str(), core::Point::new(10,30), &roboto)?;
+            highgui::add_text(&mut frame, format!("Max Threshold: {}", max_thrs).as_str(), core::Point::new(10,60), &roboto)?;
             highgui::imshow("Contour", &mut frame)?;
+            //highgui::imshow("BW", &mut bw)?;
+*/
         }
         let key = highgui::wait_key(10)?;
         if key == 113 {
             break;
         }
-        if key == 98 {
-            if bg_learning > 0.0 {
-                bg_learning = 0.0;
-            } else {
-                bg_learning = 0.5
-            }
-            println!("Background learning is now {}", bg_learning);
+        if key == 82 {
+            thrs += 1.0;
+        }
+        if key == 84 {
+            thrs -= 1.0;
+        }
+        if key == 81 {
+            max_thrs -= 1.0;
+        }
+        if key == 83 {
+            max_thrs += 1.0;
+        }
+
+        if key >= 0 {
+            println!("Key: {}", key);
         }
     }
     Ok(())

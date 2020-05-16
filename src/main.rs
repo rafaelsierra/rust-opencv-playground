@@ -14,6 +14,7 @@ fn run() -> opencv::Result<()> {
 
     let red = core::Scalar::new(0.0, 0.0, 255.0, 0.0);
     let blue = core::Scalar::new(255.0, 0.0, 0.0, 0.0);
+    let green = core::Scalar::new(0.0, 255.0, 0.0, 0.0);
 
     let roboto = highgui::font_qt(
         "Roboto",
@@ -27,15 +28,19 @@ fn run() -> opencv::Result<()> {
     if !opened {
         panic!("Unable to open default camera!");
     }
+
+    highgui::named_window(window, highgui::WINDOW_NORMAL)?;
     loop {
         let mut frame = core::Mat::default()?;
         let mut contours = types::VectorOfMat::new();
         cam.read(&mut frame)?;
 
         if frame.size()?.width > 0 {
-            let mut bw = core::Mat::default()?;
-            imgproc::cvt_color(&frame, &mut bw, imgproc::COLOR_RGB2GRAY, 1)?;
+            let mut inv_bw = core::Mat::default()?;
+            imgproc::cvt_color(&frame, &mut inv_bw, imgproc::COLOR_RGB2GRAY, 1)?;
             let mut blur = core::Mat::default()?;
+            let mut bw = core::Mat::copy(&inv_bw)?;
+            core::bitwise_not(&inv_bw, &mut bw, &core::Mat::default()?)?;
             imgproc::blur(
                 &bw,
                 &mut blur,
@@ -43,6 +48,11 @@ fn run() -> opencv::Result<()> {
                 core::Point::new(-1, -1),
                 core::BORDER_DEFAULT,
             )?;
+            let mut bw = core::Mat::copy(&inv_bw)?;
+            core::bitwise_not(&inv_bw, &mut bw, &core::Mat::default()?)?;
+            highgui::imshow("BW", &mut bw)?;
+            highgui::imshow("INV BW", &mut blur)?;
+
             let mut threshold = core::Mat::default()?;
             imgproc::threshold(
                 &blur,
@@ -58,11 +68,18 @@ fn run() -> opencv::Result<()> {
                 imgproc::CHAIN_APPROX_NONE,
                 core::Point::new(0, 0),
             )?;
+
+            let mut hulls = types::VectorOfMat::new();
             //highgui::imshow(window, &mut frame)?;
-            for contour in contours {
+            for contour in contours.iter() {
+                let mut hull = core::Mat::default()?;
+                imgproc::convex_hull(&contour, &mut hull, false, true)?;
+                hulls.push(hull);
+            }
+            //for (i, contour) in contours.iter().enumerate() {
                 imgproc::draw_contours(
                     &mut frame,
-                    &contour,
+                    &contours,
                     -1,
                     red,
                     1,
@@ -72,31 +89,35 @@ fn run() -> opencv::Result<()> {
                     core::Point::new(0, 0),
                 )?;
 
-                let mut hull = core::Mat::default()?;
-                imgproc::convex_hull(&contour, &mut hull, true, false)?;
-                println!("{:?}", hull);
-                if hull.size()?.width > 0 && hull.size()?.height > 0 {
-                    imgproc::draw_contours(
-                        &mut frame,
-                        &hull,
-                        -1,
-                        core::Scalar::new(0.0, 255.0, 0.0, 0.0),
-                        1,
-                        8,
-                        &core::Mat::default()?,
-                        0,
-                        core::Point::new(0, 0),
-                    )?;
-                }
-            }
+                imgproc::draw_contours(
+                    &mut frame,
+                    &hulls,
+                    -1,
+                    green,
+                    1,
+                    8,
+                    &core::Mat::default()?,
+                    std::i32::MAX,
+                    core::Point::new(2, 2),
+                )?;
+           // }
 
-            /*highgui::imshow("TS", &mut threshold)?;
+            //highgui::imshow("TS", &mut threshold)?;
 
-            highgui::add_text(&mut frame, format!("Threshold: {}", thrs).as_str(), core::Point::new(10,30), &roboto)?;
-            highgui::add_text(&mut frame, format!("Max Threshold: {}", max_thrs).as_str(), core::Point::new(10,60), &roboto)?;
-            highgui::imshow("Contour", &mut frame)?;
+            highgui::add_text(
+                &mut frame,
+                format!("Threshold: {}", thrs).as_str(),
+                core::Point::new(10, 30),
+                &roboto,
+            )?;
+            highgui::add_text(
+                &mut frame,
+                format!("Max Threshold: {}", max_thrs).as_str(),
+                core::Point::new(10, 60),
+                &roboto,
+            )?;
+            highgui::imshow(window, &mut frame)?;
             //highgui::imshow("BW", &mut bw)?;
-*/
         }
         let key = highgui::wait_key(10)?;
         if key == 113 {

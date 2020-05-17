@@ -6,7 +6,7 @@ Requires:
 * Linux?
 
 Usage:
-* Have a file named `images.jpeg` at the project root (example included)
+* Have a file named `video.mp4` at the project root (not included) to be used as the background
 * Execute `cargo run` from project root
 * ???
 * Profit!

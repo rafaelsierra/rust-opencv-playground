@@ -5,19 +5,23 @@ use opencv::{core, highgui, imgcodecs, imgproc, prelude::*, videoio};
 fn run() -> opencv::Result<()> {
     let window = "video capture";
     let mut cam = videoio::VideoCapture::new(0, videoio::CAP_V4L)?;
-    let opened = videoio::VideoCapture::is_opened(&cam)?;
+    let mut bg_video = videoio::VideoCapture::from_file("video.mp4", videoio::CAP_ANY)?;
     let mut thrs: i32 = 60;
     let max_thrs: f64 = 255.0;
     let mut blur_radius: i32 = 5;
 
-    if !opened {
+    let bg_video_frames = bg_video.get(videoio::CAP_PROP_FRAME_COUNT)?;
+
+    if !videoio::VideoCapture::is_opened(&cam)? {
         panic!("Unable to open default camera!");
+    }
+    if !videoio::VideoCapture::is_opened(&bg_video)? {
+        panic!("Unable to load video.mp4");
     }
 
     highgui::named_window(window, highgui::WINDOW_NORMAL)?;
     highgui::create_trackbar(&"Threshold", &window, &mut thrs, 255, None)?;
     highgui::create_trackbar(&"Blur radius", &window, &mut blur_radius, 255, None)?;
-    let base_bg_img = imgcodecs::imread("images.jpeg", imgcodecs::IMREAD_COLOR)?;
 
     loop {
         if blur_radius <= 0 {
@@ -27,6 +31,13 @@ fn run() -> opencv::Result<()> {
         let mut blur = core::Mat::default()?;
         let mut bw = core::Mat::default()?;
         let mut threshold = core::Mat::default()?;
+
+        let mut base_bg_img = core::Mat::default()?;
+
+        bg_video.read(&mut base_bg_img)?;
+        if bg_video.get(videoio::CAP_PROP_POS_FRAMES)? >= bg_video_frames {
+            bg_video.set(videoio::CAP_PROP_POS_FRAMES, 0.0)?;
+        }
 
         cam.read(&mut frame)?;
         if frame.size()?.width > 0 {
@@ -69,7 +80,6 @@ fn run() -> opencv::Result<()> {
             core::bitwise_and(&bg_img, &bg_img, &mut frame_clone, &threshold)?;
             // Show result
             highgui::imshow(window, &mut frame_clone)?;
-            highgui::imshow("Foreground", &foreground)?;
         }
         let key = highgui::wait_key(10)?;
         if key == 113 {

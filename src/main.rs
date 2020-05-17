@@ -1,6 +1,11 @@
 extern crate opencv;
 
-use opencv::{core, highgui, imgcodecs, imgproc, prelude::*, videoio};
+use opencv::{core, highgui, imgcodecs, imgproc, prelude::*, types, videoio};
+
+use std::fs::File;
+use std::io::prelude::*;
+use std::path::Path;
+use std::vec;
 
 fn run() -> opencv::Result<()> {
     let window = "video capture";
@@ -10,6 +15,12 @@ fn run() -> opencv::Result<()> {
     let max_thrs: f64 = 255.0;
     let mut blur_radius: i32 = 5;
 
+    let out_path = Path::new("/dev/video2");
+    let mut output = match File::create(out_path) {
+        Err(why) => panic!("couldn't open {}: {}", out_path.display(), why,),
+        Ok(file) => file,
+    };
+
     let bg_video_frames = bg_video.get(videoio::CAP_PROP_FRAME_COUNT)?;
 
     if !videoio::VideoCapture::is_opened(&cam)? {
@@ -18,7 +29,6 @@ fn run() -> opencv::Result<()> {
     if !videoio::VideoCapture::is_opened(&bg_video)? {
         panic!("Unable to load video.mp4");
     }
-
     highgui::named_window(window, highgui::WINDOW_NORMAL)?;
     highgui::create_trackbar(&"Threshold", &window, &mut thrs, 255, None)?;
     highgui::create_trackbar(&"Blur radius", &window, &mut blur_radius, 255, None)?;
@@ -79,6 +89,18 @@ fn run() -> opencv::Result<()> {
             )?;
             core::bitwise_and(&bg_img, &bg_img, &mut frame_clone, &threshold)?;
             // Show result
+            //output.write(frame_clone.data()?)?;
+            let mut channels = types::VectorOfMat::with_capacity(3);
+            core::split(&frame_clone, &mut channels)?;
+            let mut flat_frame = vec::Vec::new();
+            for c in channels.iter() {
+                for x in 0..c.rows() {
+                    for y in 0..c.cols() {
+                        flat_frame.push(*c.at_2d::<u8>(x, y)?);
+                    }
+                }
+            }
+            println!("1");
             highgui::imshow(window, &mut frame_clone)?;
         }
         let key = highgui::wait_key(10)?;

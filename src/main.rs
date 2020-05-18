@@ -1,11 +1,7 @@
 extern crate opencv;
 
-use opencv::{core, highgui, imgcodecs, imgproc, prelude::*, types, videoio};
+use opencv::{core, highgui, imgproc, prelude::*, videoio};
 
-use std::fs::File;
-use std::io::prelude::*;
-use std::path::Path;
-use std::vec;
 
 fn run() -> opencv::Result<()> {
     let window = "video capture";
@@ -14,15 +10,22 @@ fn run() -> opencv::Result<()> {
     let mut thrs: i32 = 60;
     let max_thrs: f64 = 255.0;
     let mut blur_radius: i32 = 5;
-
-    let out_path = Path::new("/dev/video2");
-    let mut output = match File::create(out_path) {
-        Err(why) => panic!("couldn't open {}: {}", out_path.display(), why,),
-        Ok(file) => file,
-    };
-
+    let fps = 24.0;
+    // The writer below works but is too slow
+    /*
+    let mut writer = videoio::VideoWriter::new_with_backend(
+        "appsrc ! videoconvert ! video/x-raw,format=YUY2 ! v4l2sink device=/dev/video2",
+        videoio::CAP_GSTREAMER,
+        0,
+        fps,
+        core::Size::new(640, 480),
+        true,
+    )?;
+    if !writer.is_opened()? {
+        panic!("Failed to open output");
+    }
+    */
     let bg_video_frames = bg_video.get(videoio::CAP_PROP_FRAME_COUNT)?;
-
     if !videoio::VideoCapture::is_opened(&cam)? {
         panic!("Unable to open default camera!");
     }
@@ -89,21 +92,12 @@ fn run() -> opencv::Result<()> {
             )?;
             core::bitwise_and(&bg_img, &bg_img, &mut frame_clone, &threshold)?;
             // Show result
-            //output.write(frame_clone.data()?)?;
-            let mut channels = types::VectorOfMat::with_capacity(3);
-            core::split(&frame_clone, &mut channels)?;
-            let mut flat_frame = vec::Vec::new();
-            for c in channels.iter() {
-                for x in 0..c.rows() {
-                    for y in 0..c.cols() {
-                        flat_frame.push(*c.at_2d::<u8>(x, y)?);
-                    }
-                }
-            }
-            println!("1");
+            //writer.write(&frame_clone)?;
             highgui::imshow(window, &mut frame_clone)?;
+            highgui::imshow("WEBCAM", &mut frame_clone)?;
         }
-        let key = highgui::wait_key(10)?;
+        let wait_delay = 1000.0 / fps;
+        let key = highgui::wait_key(wait_delay as i32)?;
         if key == 113 {
             break;
         }
